@@ -1,6 +1,6 @@
 var BigNumber = require('bignumber.js'),
     helpers = require('./helpers'),
-    db = require('../db')
+    db = require('../../db')
 
 var target = 'MergeShards',
     request = helpers.request,

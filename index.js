@@ -10,10 +10,25 @@ var https = require('https'),
 
 var MAX_REQUEST_BYTES = 7 * 1024 * 1024
 
-var validApis = ['Kinesis_20131202'],
-    validOperations = ['AddTagsToStream', 'CreateStream', 'DeleteStream', 'DescribeStream', 'GetRecords',
-      'GetShardIterator', 'ListStreams', 'ListTagsForStream', 'MergeShards', 'PutRecord', 'PutRecords',
-      'RemoveTagsFromStream', 'SplitShard', 'IncreaseStreamRetentionPeriod', 'DecreaseStreamRetentionPeriod'],
+var supportedOperations = {
+      Kinesis_20131202: [
+        'AddTagsToStream',
+        'CreateStream',
+        'DecreaseStreamRetentionPeriod',
+        'DeleteStream',
+        'DescribeStream',
+        'GetRecords',
+        'GetShardIterator',
+        'IncreaseStreamRetentionPeriod',
+        'ListStreams',
+        'ListTagsForStream',
+        'MergeShards',
+        'PutRecord',
+        'PutRecords',
+        'RemoveTagsFromStream',
+        'SplitShard',
+      ],
+    },
     actions = {},
     actionValidations = {}
 
@@ -49,10 +64,25 @@ function kinesalite(options) {
   return server
 }
 
-validOperations.forEach(function(action) {
-  action = validations.toLowerFirst(action)
-  actions[action] = require('./actions/' + action)
-  actionValidations[action] = require('./validations/' + action)
+Object.keys(supportedOperations).forEach(function(api) {
+    let namespace
+
+    if (api.startsWith('Kinesis')) {
+      namespace = 'kinesis'
+    } else if (api.startsWith('Firehose')) {
+      namespace = 'firehose'
+    } else {
+      namespace = false
+    }
+
+    const subdir = namespace ? namespace + '/' : ''
+
+    supportedOperations[api].forEach(function(action) {
+      const key = namespace ? namespace + '_' + action : action
+
+      actions[key] = require('./actions/' + subdir + action)
+      actionValidations[key] = require('./validations/' + subdir + action)
+    })
 })
 
 function sendRaw(req, res, body, statusCode) {
@@ -123,8 +153,10 @@ function httpHandler(store, req, res) {
     var target = (req.headers['x-amz-target'] || '').split('.')
     var service = target[0]
     var operation = target[1]
-    var serviceValid = service && ~validApis.indexOf(service)
-    var operationValid = operation && ~validOperations.indexOf(operation)
+    var serviceValid = service && supportedOperations[service]
+    var operationValid = operation && serviceValid && ~supportedOperations[service].indexOf(operation)
+
+    console.log('Target:', target)
 
     // AWS doesn't seem to care about the HTTP path, so no checking needed for that
 
@@ -226,7 +258,10 @@ function httpHandler(store, req, res) {
 
     // If we've reached here, we're good to go:
 
-    var action = validations.toLowerFirst(operation)
+    var serviceName = service.split('_')[0]
+    var serviceNamespace = serviceName ? validations.toLowerFirst(serviceName) + '_' : ''
+    var action = serviceNamespace + validations.toLowerFirst(operation)
+
     var actionValidation = actionValidations[action]
     try {
       data = validations.checkTypes(data, actionValidation.types)
@@ -245,4 +280,3 @@ function httpHandler(store, req, res) {
 }
 
 if (require.main === module) kinesalite().listen(4567)
-

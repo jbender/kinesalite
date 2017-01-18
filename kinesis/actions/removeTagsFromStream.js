@@ -1,4 +1,4 @@
-var db = require('../db')
+var db = require('../../db')
 
 module.exports = function removeTagsFromStream(store, data, cb) {
 

@@ -10,6 +10,3 @@ module.exports = function describeStream(store, data, cb) {
     cb(null, {StreamDescription: stream})
   })
 }
-
-
-

@@ -1,6 +1,6 @@
-var db = require('../db')
+var db = require('../../db')
 
-module.exports = function increaseStreamRetentionPeriod(store, data, cb) {
+module.exports = function decreaseStreamRetentionPeriod(store, data, cb) {
 
   var metaDb = store.metaDb
 
@@ -22,12 +22,12 @@ module.exports = function increaseStreamRetentionPeriod(store, data, cb) {
           ' hours) is too long.'))
       }
 
-      if (stream.RetentionPeriodHours > data.RetentionPeriodHours) {
+      if (stream.RetentionPeriodHours < data.RetentionPeriodHours) {
         return cb(db.clientError('InvalidArgumentException',
           'Requested retention period (' + data.RetentionPeriodHours +
           ' hours) for stream ' + data.StreamName +
-          ' can not be shorter than existing retention period (' + stream.RetentionPeriodHours +
-          ' hours). Use DecreaseRetentionPeriod API.'))
+          ' can not be longer than existing retention period (' + stream.RetentionPeriodHours +
+          ' hours). Use IncreaseRetentionPeriod API.'))
       }
 
       stream.RetentionPeriodHours = data.RetentionPeriodHours

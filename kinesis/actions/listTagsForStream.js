@@ -15,6 +15,3 @@ module.exports = function listTagsForStream(store, data, cb) {
     cb(null, {Tags: tags, HasMoreTags: hasMoreTags})
   })
 }
-
-
-

@@ -1,5 +1,5 @@
 var once = require('once'),
-    db = require('../db')
+    db = require('../../db')
 
 module.exports = function listStreams(store, data, cb) {
   cb = once(cb)
@@ -15,5 +15,3 @@ module.exports = function listStreams(store, data, cb) {
     cb(null, {StreamNames: names.slice(0, limit), HasMoreStreams: names.length > limit})
   })
 }
-
-

@@ -1,5 +1,5 @@
 var BigNumber = require('bignumber.js'),
-    db = require('../db')
+    db = require('../../db')
 
 var POW_128 = new BigNumber(2).pow(128),
     SEQ_ADJUST_MS = 2000

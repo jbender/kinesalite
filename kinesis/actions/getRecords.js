@@ -1,6 +1,6 @@
 var crypto = require('crypto'),
     once = require('once'),
-    db = require('../db')
+    db = require('../../db')
 
 module.exports = function getRecords(store, data, cb) {
 

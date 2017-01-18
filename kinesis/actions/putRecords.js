@@ -1,5 +1,5 @@
 var BigNumber = require('bignumber.js'),
-    db = require('../db')
+    db = require('../../db')
 
 module.exports = function putRecords(store, data, cb) {
 

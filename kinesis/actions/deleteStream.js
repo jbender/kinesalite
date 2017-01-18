@@ -26,6 +26,3 @@ module.exports = function deleteStream(store, data, cb) {
   })
 
 }
-
-
-

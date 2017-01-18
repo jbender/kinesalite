@@ -1,4 +1,4 @@
-var db = require('../db')
+var db = require('../../db')
 
 module.exports = function getShardIterator(store, data, cb) {
 
@@ -83,4 +83,3 @@ module.exports = function getShardIterator(store, data, cb) {
     cb(null, {ShardIterator: db.createShardIterator(data.StreamName, shardId, iteratorSeq)})
   })
 }
-
