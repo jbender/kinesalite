@@ -5,6 +5,7 @@
   "main": "index.js",
   "bin": "cli.js",
   "scripts": {
+    "start": "node cli.js",
     "test": "mocha --require should --reporter spec -t $([ $REMOTE ] && echo 30s || echo 4s) --recursive",
     "coverage": "istanbul cover ./node_modules/.bin/_mocha -- --require should -t 4s"
   },
