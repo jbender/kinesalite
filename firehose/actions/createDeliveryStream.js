@@ -1,3 +1,60 @@
+var db = require('../../db')
+
 module.exports = function createDeliveryStream(store, data, cb) {
-  cb({statusCode: 501, body: 'Not Yet Implemented'})
+
+  var key = data.DeliveryStreamName,
+      metaDb = store.metaDb
+
+  metaDb.lock(key, function(release) {
+    cb = release(cb)
+
+    metaDb.get(key, function(err) {
+      if (err && err.name != 'NotFoundError') return cb(err)
+      if (!err) return cb(db.clientError('ResourceInUseException',
+          'DeliveryStream ' + key + ' under account ' + metaDb.awsAccountId + ' already exists.'))
+
+      arn = 'arn:aws:kinesis' +
+          ':' + metaDb.awsRegion +
+          ':' + metaDb.awsAccountId +
+          ':deliverystream/' + data.DeliveryStreamName
+
+      destination =
+        data.ElasticsearchDestinationConfiguration ||
+        data.ExtendedS3DestinationConfiguration ||
+        data.RedshiftDestinationConfiguration ||
+        data.S3DestinationConfiguration
+
+      now = Date.now()
+
+      stream = {
+          CreateTimestamp: now,
+          DeliveryStreamARN: arn,
+          DeliveryStreamName: data.DeliveryStreamName,
+          DeliveryStreamStatus: 'CREATING',
+          Destinations: [destination],
+          HasMoreDestinations: false,
+          LastUpdatedTimestamp: now,
+          VersionId: 1,
+      }
+
+      metaDb.put(key, stream, function(err) {
+        if (err) return cb(err)
+
+        setTimeout(function() {
+
+            // Shouldn't need to lock/fetch as nothing should have changed
+            stream.DeliveryStreamStatus = 'ACTIVE'
+
+            metaDb.put(key, stream, function(err) {
+                if (err && !/Database is not open/.test(err))
+                    console.error(err.stack || err)
+            })
+
+        }, store.createStreamMs)
+
+        cb()
+      })
+    })
+  })
+
 }
