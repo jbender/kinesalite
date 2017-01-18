@@ -28,6 +28,15 @@ var supportedOperations = {
         'RemoveTagsFromStream',
         'SplitShard',
       ],
+      Firehose_20150804: [
+        'CreateDeliveryStream',
+        'DeleteDeliveryStream',
+        'DescribeDeliveryStream',
+        'ListDeliveryStream',
+        'PutRecord',
+        'PutRecordBatch',
+        'UpdateDestination',
+      ],
     },
     actions = {},
     actionValidations = {}
