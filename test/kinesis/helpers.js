@@ -4,7 +4,7 @@ var http = require('http'),
     async = require('async'),
     once = require('once'),
     BigNumber = require('bignumber.js'),
-    kinesalite = require('..')
+    kinesalite = require('../../')
 
 http.globalAgent.maxSockets = https.globalAgent.maxSockets = Infinity
 
