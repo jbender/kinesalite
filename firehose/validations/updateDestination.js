@@ -1,3 +1,5 @@
+var dataTypes = require('../dataTypes')
+
 exports.types = {
   CurrentDeliveryStreamVersionId: {
     type: 'String',
