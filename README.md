@@ -1,7 +1,9 @@
 Kinesalite
 ----------
 
-[![Build Status](https://secure.travis-ci.org/mhart/kinesalite.png?branch=master)](http://travis-ci.org/mhart/kinesalite)
+[![Build Status](https://secure.travis-ci.org/mhart/kinesalite.svg?branch=master)](http://travis-ci.org/mhart/kinesalite)
+[![Dependency Status](https://david-dm.org/mhart/kinesalite.svg)](https://david-dm.org/mhart/kinesalite)
+[![NPM Package](https://img.shields.io/npm/v/kinesalite.svg)](https://www.npmjs.com/package/kinesalite)
 
 An implementation of [Amazon's Kinesis](http://docs.aws.amazon.com/kinesis/latest/APIReference/),
 focussed on correctness and performance, and built on LevelDB
@@ -87,4 +89,3 @@ With [npm](http://npmjs.org/) do:
 ```sh
 $ npm install -g kinesalite
 ```
-
