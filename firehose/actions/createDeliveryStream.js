@@ -2,21 +2,21 @@ var db = require('../../db')
 
 module.exports = function createDeliveryStream(store, data, cb) {
 
-  var key = data.DeliveryStreamName,
+  var streamName = data.DeliveryStreamName,
       metaDb = store.metaDb
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamName, function(release) {
     cb = release(cb)
 
-    metaDb.get(key, function(err) {
+    metaDb.get(streamName, function(err) {
       if (err && err.name != 'NotFoundError') return cb(err)
       if (!err) return cb(db.clientError('ResourceInUseException',
-          'DeliveryStream ' + key + ' under account ' + metaDb.awsAccountId + ' already exists.'))
+          'DeliveryStream ' + streamName + ' under account ' + metaDb.awsAccountId + ' already exists.'))
 
       arn = 'arn:aws:kinesis' +
           ':' + metaDb.awsRegion +
           ':' + metaDb.awsAccountId +
-          ':deliverystream/' + data.DeliveryStreamName
+          ':deliverystream/' + streamName
 
       destination =
         data.ElasticsearchDestinationConfiguration ||
@@ -29,7 +29,7 @@ module.exports = function createDeliveryStream(store, data, cb) {
       stream = {
           CreateTimestamp: now,
           DeliveryStreamARN: arn,
-          DeliveryStreamName: data.DeliveryStreamName,
+          DeliveryStreamName: streamName,
           DeliveryStreamStatus: 'CREATING',
           Destinations: [destination],
           HasMoreDestinations: false,
@@ -37,7 +37,7 @@ module.exports = function createDeliveryStream(store, data, cb) {
           VersionId: 1,
       }
 
-      metaDb.put(key, stream, function(err) {
+      metaDb.put(streamName, stream, function(err) {
         if (err) return cb(err)
 
         setTimeout(function() {
@@ -45,7 +45,7 @@ module.exports = function createDeliveryStream(store, data, cb) {
             // Shouldn't need to lock/fetch as nothing should have changed
             stream.DeliveryStreamStatus = 'ACTIVE'
 
-            metaDb.put(key, stream, function(err) {
+            metaDb.put(streamName, stream, function(err) {
                 if (err && !/Database is not open/.test(err))
                     console.error(err.stack || err)
             })

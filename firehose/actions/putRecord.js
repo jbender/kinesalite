@@ -3,30 +3,30 @@ var uuid = require('node-uuid'),
 
 module.exports = function putRecord(store, data, cb) {
 
-  var key = data.DeliveryStreamName,
+  var streamName = data.DeliveryStreamName,
       metaDb = store.metaDb,
-      streamDb = store.getStreamDb(key)
+      streamDb = store.getStreamDb(streamName)
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamName, function(release) {
     cb = release(cb)
 
-    store.getStream(key, function(err, stream) {
+    store.getStream(streamName, function(err, stream) {
       if (err) return cb(err)
 
       if (!~['ACTIVE', 'UPDATING'].indexOf(stream.DeliveryStreamStatus)) {
         return cb(db.clientError('ResourceNotFoundException',
-          'DeliveryStream ' + key + ' under account ' + metaDb.awsAccountId + ' not found.'))
+          'DeliveryStream ' + streamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
       }
 
-      var streamKey = uuid.v1()
+      var recordId = uuid.v1()
       var record = {
         Data: data.Record.Data,
         _timestamp: Date.now(),
       }
 
-      streamDb.put(streamKey, record, function(err) {
+      streamDb.put(recordId, record, function(err) {
         if (err) return cb(err)
-        cb(null, {RecordId: streamKey})
+        cb(null, {RecordId: recordId})
       })
     })
   })
