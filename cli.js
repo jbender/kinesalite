@@ -18,6 +18,7 @@ if (argv.help) {
     '--deleteStreamMs <ms>  Amount of time streams stay in DELETING state (default: 500)',
     '--updateStreamMs <ms>  Amount of time streams stay in UPDATING state (default: 500)',
     '--shardLimit <limit>   Shard limit for error reporting (default: 10)',
+    '--logLevel <error|warn|info|verbose|debug|silly> Verbosity of logged events (default: info)',
     '',
     'Report bugs at github.com/mhart/kinesalite/issues',
   ].join('\n'))
@@ -27,6 +28,7 @@ if (argv.help) {
 if (process.pid == 1) process.on('SIGINT', process.exit)
 
 var server = require('./index.js')(argv).listen(argv.port || 4567, function() {
+  var logger = require('./utils/logger').create(argv)
   var address = server.address(), protocol = argv.ssl ? 'https' : 'http'
-  console.log('Listening at %s://%s:%s', protocol, address.address, address.port)
+  logger.info('Listening at %s://%s:%s', protocol, address.address, address.port)
 })

@@ -6,7 +6,8 @@ var https = require('https'),
     crypto = require('crypto'),
     uuid = require('node-uuid'),
     validations = require('./validations'),
-    db = require('./db')
+    db = require('./db'),
+    logger = require('./utils/logger')
 
 var MAX_REQUEST_BYTES = 7 * 1024 * 1024
 
@@ -45,7 +46,11 @@ module.exports = kinesalite
 
 function kinesalite(options) {
   options = options || {}
-  var server, store = db.create(options), requestHandler = httpHandler.bind(null, store)
+
+  var server,
+      store = db.create(options),
+      serverLogger = logger.create(options),
+      requestHandler = httpHandler.bind(null, serverLogger, store)
 
   if (options.ssl) {
     options.key = options.key || fs.readFileSync(path.join(__dirname, 'ssl', 'server-key.pem'))
@@ -74,22 +79,24 @@ function kinesalite(options) {
 }
 
 Object.keys(serviceActions).forEach(function(service) {
-    var namespace
+  var namespace
 
-    if (service.startsWith('Kinesis')) {
-      namespace = 'kinesis'
-    } else if (service.startsWith('Firehose')) {
-      namespace = 'firehose'
-    }
+  if (service.startsWith('Kinesis')) {
+    namespace = 'kinesis'
+  } else if (service.startsWith('Firehose')) {
+    namespace = 'firehose'
+  }
 
-    serviceActions[service].forEach(function(actionName) {
-      var fileName = validations.toLowerFirst(actionName)
-      var key = namespace + actionName
+  serviceActions[service].forEach(function(actionName) {
+    var fileName = validations.toLowerFirst(actionName)
+    var key = namespace + actionName
 
-      actions[key] = require('./' + namespace + '/actions/' + fileName)
-      actionValidations[key] = require('./' + namespace + '/validations/' + fileName)
-    })
+    actions[key] = require('./' + namespace + '/actions/' + fileName)
+    actionValidations[key] = require('./' + namespace + '/validations/' + fileName)
+  })
 })
+
+function currentISOTimestamp() { return (new Date()).toISOString() }
 
 function sendRaw(req, res, body, statusCode) {
   req.removeAllListeners()
@@ -113,17 +120,24 @@ function sendError(req, res, contentValid, type, msg) {
       sendRaw(req, res, '<' + type + '>\n  <Message>' + msg + '</Message>\n</' + type + '>\n', 403)
 }
 
-function httpHandler(store, req, res) {
+function httpHandler(logger, store, req, res) {
   var body
-  req.on('error', function(err) { throw err })
+      requestId = uuid.v1()
+
+  logger.info(requestId + ' request start ' + currentISOTimestamp())
+
+  req.on('error', function(err) { logger.error(err); throw err })
+
   req.on('data', function(data) {
     var newLength = data.length + (body ? body.length : 0)
     if (newLength > MAX_REQUEST_BYTES) {
       res.setHeader('Transfer-Encoding', 'chunked')
+      logger.verbose(requestId + ' received chunk')
       return sendRaw(req, res, null, 413)
     }
     body = body ? Buffer.concat([body, data], newLength) : data
   })
+
   req.on('end', function() {
 
     body = body ? body.toString() : ''
@@ -159,6 +173,9 @@ function httpHandler(store, req, res) {
     var target = (req.headers['x-amz-target'] || '').split('.')
     var service = target[0]
     var operation = target[1]
+
+    logger.info(requestId + ' target operation ' + service + ':' + operation)
+
     var serviceValid = service && serviceActions[service]
     var operationValid = operation && serviceValid && ~serviceActions[service].indexOf(operation)
 
@@ -175,17 +192,20 @@ function httpHandler(store, req, res) {
 
         if (typeof data != 'object' || data == null) {
           if (contentType == 'application/json') {
+            logger.verbose(requestId + ' com.amazon.coral.service#SerializationException')
             return sendJson(req, res, {
               Output: {__type: 'com.amazon.coral.service#SerializationException', Message: null},
               Version: '1.0',
             }, 200)
           }
+          logger.verbose(requestId + ' SerializationException')
           return sendJson(req, res, {__type: 'SerializationException'}, 400)
         }
       }
 
       // After this point, application/json doesn't seem to progress any further
       if (contentType == 'application/json') {
+        logger.verbose(requestId + ' com.amazon.coral.service#UnknownOperationException')
         return sendJson(req, res, {
           Output: {__type: 'com.amazon.coral.service#UnknownOperationException', message: null},
           Version: '1.0',
@@ -193,10 +213,12 @@ function httpHandler(store, req, res) {
       }
 
       if (!serviceValid || !operationValid) {
+        logger.verbose(requestId + ' UnknownOperationException')
         return sendJson(req, res, {__type: 'UnknownOperationException'}, 400)
       }
 
       if (!data) {
+        logger.verbose(requestId + ' SerializationException')
         return sendJson(req, res, {__type: 'SerializationException'}, 400)
       }
     }
@@ -209,11 +231,13 @@ function httpHandler(store, req, res) {
     var msg = '', params
 
     if (authHeader && authQuery) {
+      logger.verbose(requestId + ' InvalidSignatureException')
       return sendError(req, res, contentValid, 'InvalidSignatureException',
         'Found both \'X-Amz-Algorithm\' as a query-string param and \'Authorization\' as HTTP header.')
     }
 
     if (!authHeader && !authQuery) {
+      logger.verbose(requestId + ' MissingAuthenticationTokenException')
       return sendError(req, res, contentValid, 'MissingAuthenticationTokenException', 'Missing Authentication Token')
     }
 
@@ -242,6 +266,7 @@ function httpHandler(store, req, res) {
     }
 
     if (msg) {
+      logger.verbose(requestId + ' IncompleteSignatureException')
       return sendError(req, res, contentValid, 'IncompleteSignatureException', msg)
     }
 
@@ -249,14 +274,18 @@ function httpHandler(store, req, res) {
 
     if (!contentValid) {
       if (!service || !operation) {
+        logger.verbose(requestId + ' AccessDeniedException')
         return sendError(req, res, false, 'AccessDeniedException',
           'Unable to determine service/operation name to be authorized')
       } else if (!serviceValid) {
+        logger.verbose(requestId + ' UnrecognizedClientException')
         return sendError(req, res, false, 'UnrecognizedClientException',
           'No authorization strategy was found for service: ' + service + ', operation: ' + operation)
       } else if (!operationValid) {
+        logger.verbose(requestId + ' InternalFailure')
         return sendError(req, res, false, 'InternalFailure', 500)
       }
+      logger.verbose(requestId + ' UnknownOperationException')
       return sendError(req, res, false, 'UnknownOperationException', 404)
     }
 
@@ -266,18 +295,31 @@ function httpHandler(store, req, res) {
     var serviceNamespace = serviceName ? validations.toLowerFirst(serviceName) : ''
     var action = serviceNamespace + operation
 
+    logger.verbose(requestId + ' calling action ' + action)
+
     var actionValidation = actionValidations[action]
     try {
       data = validations.checkTypes(data, actionValidation.types)
       validations.checkValidations(data, actionValidation.types, actionValidation.custom, operation)
     } catch (e) {
+      logger.verbose(requestId + ' failed validation')
       if (e.statusCode) return sendJson(req, res, e.body, e.statusCode)
       throw e
     }
 
     actions[action](store, data, function(err, data) {
-      if (err && err.statusCode) return sendJson(req, res, err.body, err.statusCode)
-      if (err) throw err
+      logger.verbose(requestId + ' action finished')
+      if (err) {
+        if (err.statusCode) {
+          logger.verbose(requestId + ' status code ' + err.statusCode)
+          if (err.body) logger.debug('    ' + err.body.message ? err.body.message : err.body)
+          return sendJson(req, res, err.body, err.statusCode)
+        }
+        logger.verbose(requestId + ' errored without status code')
+        throw err
+      }
+
+      logger.verbose(requestId + ' request complete ' + currentISOTimestamp())
       sendJson(req, res, data)
     })
   })
