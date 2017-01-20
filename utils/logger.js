@@ -10,10 +10,13 @@ exports.create = function(options) {
         colorize: true,
         formatter: function(options) {
           // Return string will be passed to logger.
-          return 'kinesalite' +
+          return '[' + (new Date()).toISOString() + ']: ' +
+            'kinesalite' +
             (options.meta && options.meta.process ? ':' + options.meta.process : '') +
             ' ' +
-            (options.message ? options.message : '')
+            (options.message ? options.message : '') +
+            (options.meta.action ? ' action:' + options.meta.action : '') +
+            (options.meta && options.meta.requestId ? ' requestId:' + options.meta.requestId : '')
         },
       }),
     ],

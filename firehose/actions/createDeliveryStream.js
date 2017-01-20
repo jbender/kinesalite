@@ -1,17 +1,29 @@
 var db = require('../../db')
 
-module.exports = function createDeliveryStream(store, data, cb) {
+module.exports = function createDeliveryStream(requestMeta, logger, store, data, cb) {
 
-  var streamName = data.DeliveryStreamName,
+  var actionName = 'firehose.createDeliveryStream',
+      actionMeta = Object.assign({}, requestMeta),
+      streamName = data.DeliveryStreamName,
       metaDb = store.metaDb
+
+  actionMeta.action = actionName
+
+  logger.verbose('action.start', actionMeta)
 
   metaDb.lock(streamName, function(release) {
     cb = release(cb)
 
     metaDb.get(streamName, function(err) {
-      if (err && err.name != 'NotFoundError') return cb(err)
-      if (!err) return cb(db.clientError('ResourceInUseException',
+      if (err && err.name != 'NotFoundError') {
+        logger.verbose('action.error', actionMeta)
+        return cb(err)
+      }
+      if (!err) {
+        logger.verbose('action.error streamExists', actionMeta)
+        return cb(db.clientError('ResourceInUseException',
           'DeliveryStream ' + streamName + ' under account ' + metaDb.awsAccountId + ' already exists.'))
+      }
 
       arn = 'arn:aws:kinesis' +
           ':' + metaDb.awsRegion +
@@ -38,7 +50,10 @@ module.exports = function createDeliveryStream(store, data, cb) {
       }
 
       metaDb.put(streamName, stream, function(err) {
-        if (err) return cb(err)
+        if (err) {
+          logger.verbose('action.error', actionMeta)
+          return cb(err)
+        }
 
         setTimeout(function() {
 
@@ -46,12 +61,13 @@ module.exports = function createDeliveryStream(store, data, cb) {
             stream.DeliveryStreamStatus = 'ACTIVE'
 
             metaDb.put(streamName, stream, function(err) {
-                if (err && !/Database is not open/.test(err))
-                    console.error(err.stack || err)
+              if (err && !/Database is not open/.test(err))
+                logger.error(err.stack || err)
             })
 
         }, store.createStreamMs)
 
+        logger.verbose('action.complete', actionMeta)
         cb()
       })
     })

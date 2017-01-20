@@ -30,5 +30,5 @@ if (process.pid == 1) process.on('SIGINT', process.exit)
 var server = require('./index.js')(argv).listen(argv.port || 4567, function() {
   var logger = require('./utils/logger').create(argv)
   var address = server.address(), protocol = argv.ssl ? 'https' : 'http'
-  logger.info('Listening at %s://%s:%s', protocol, address.address, address.port)
+  logger.info('server.start %s://%s:%s', protocol, address.address, address.port)
 })

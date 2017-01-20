@@ -1,5 +1,5 @@
 
-module.exports = function listTagsForStream(store, data, cb) {
+module.exports = function listTagsForStream(requestMeta, logger, store, data, cb) {
 
   store.getStream(data.StreamName, function(err, stream) {
     if (err) return cb(err)

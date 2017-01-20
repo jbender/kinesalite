@@ -1,5 +1,5 @@
 
-module.exports = function describeStream(store, data, cb) {
+module.exports = function describeStream(requestMeta, logger, store, data, cb) {
 
   store.getStream(data.StreamName, function(err, stream) {
     if (err) return cb(err)

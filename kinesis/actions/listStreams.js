@@ -1,7 +1,7 @@
 var once = require('once'),
     db = require('../../db')
 
-module.exports = function listStreams(store, data, cb) {
+module.exports = function listStreams(requestMeta, logger, store, data, cb) {
   cb = once(cb)
   var opts, keys, limit = data.Limit || 10
 

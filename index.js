@@ -96,8 +96,6 @@ Object.keys(serviceActions).forEach(function(service) {
   })
 })
 
-function currentISOTimestamp() { return (new Date()).toISOString() }
-
 function sendRaw(req, res, body, statusCode) {
   req.removeAllListeners()
   res.statusCode = statusCode || 200
@@ -121,10 +119,11 @@ function sendError(req, res, contentValid, type, msg) {
 }
 
 function httpHandler(logger, store, req, res) {
-  var body
-      requestId = uuid.v1()
+  var body,
+      requestId = uuid.v1(),
+      requestMeta = {requestId}
 
-  logger.info(requestId + ' request start ' + currentISOTimestamp())
+  logger.info('request.start', requestMeta)
 
   req.on('error', function(err) { logger.error(err); throw err })
 
@@ -143,7 +142,7 @@ function httpHandler(logger, store, req, res) {
     body = body ? body.toString() : ''
 
     // All responses after this point have a RequestId
-    res.setHeader('x-amzn-RequestId', uuid.v1())
+    res.setHeader('x-amzn-RequestId', requestId)
     if (req.method != 'OPTIONS' || !req.headers.origin)
       res.setHeader('x-amz-id-2', crypto.randomBytes(72).toString('base64'))
 
@@ -174,7 +173,7 @@ function httpHandler(logger, store, req, res) {
     var service = target[0]
     var operation = target[1]
 
-    logger.info(requestId + ' target operation ' + service + ':' + operation)
+    logger.info('request.operation ' + service + ':' + operation, requestMeta)
 
     var serviceValid = service && serviceActions[service]
     var operationValid = operation && serviceValid && ~serviceActions[service].indexOf(operation)
@@ -192,20 +191,20 @@ function httpHandler(logger, store, req, res) {
 
         if (typeof data != 'object' || data == null) {
           if (contentType == 'application/json') {
-            logger.verbose(requestId + ' com.amazon.coral.service#SerializationException')
+            logger.verbose('request.error com.amazon.coral.service#SerializationException', requestMeta)
             return sendJson(req, res, {
               Output: {__type: 'com.amazon.coral.service#SerializationException', Message: null},
               Version: '1.0',
             }, 200)
           }
-          logger.verbose(requestId + ' SerializationException')
+          logger.verbose('request.error SerializationException', requestMeta)
           return sendJson(req, res, {__type: 'SerializationException'}, 400)
         }
       }
 
       // After this point, application/json doesn't seem to progress any further
       if (contentType == 'application/json') {
-        logger.verbose(requestId + ' com.amazon.coral.service#UnknownOperationException')
+        logger.verbose('request.error com.amazon.coral.service#UnknownOperationException', requestMeta)
         return sendJson(req, res, {
           Output: {__type: 'com.amazon.coral.service#UnknownOperationException', message: null},
           Version: '1.0',
@@ -213,12 +212,12 @@ function httpHandler(logger, store, req, res) {
       }
 
       if (!serviceValid || !operationValid) {
-        logger.verbose(requestId + ' UnknownOperationException')
+        logger.verbose('request.error UnknownOperationException', requestMeta)
         return sendJson(req, res, {__type: 'UnknownOperationException'}, 400)
       }
 
       if (!data) {
-        logger.verbose(requestId + ' SerializationException')
+        logger.verbose('request.error SerializationException', requestMeta)
         return sendJson(req, res, {__type: 'SerializationException'}, 400)
       }
     }
@@ -231,13 +230,13 @@ function httpHandler(logger, store, req, res) {
     var msg = '', params
 
     if (authHeader && authQuery) {
-      logger.verbose(requestId + ' InvalidSignatureException')
+      logger.verbose('request.error InvalidSignatureException', requestMeta)
       return sendError(req, res, contentValid, 'InvalidSignatureException',
         'Found both \'X-Amz-Algorithm\' as a query-string param and \'Authorization\' as HTTP header.')
     }
 
     if (!authHeader && !authQuery) {
-      logger.verbose(requestId + ' MissingAuthenticationTokenException')
+      logger.verbose('request.error MissingAuthenticationTokenException', requestMeta)
       return sendError(req, res, contentValid, 'MissingAuthenticationTokenException', 'Missing Authentication Token')
     }
 
@@ -266,7 +265,7 @@ function httpHandler(logger, store, req, res) {
     }
 
     if (msg) {
-      logger.verbose(requestId + ' IncompleteSignatureException')
+      logger.verbose('request.error IncompleteSignatureException', requestMeta)
       return sendError(req, res, contentValid, 'IncompleteSignatureException', msg)
     }
 
@@ -274,18 +273,18 @@ function httpHandler(logger, store, req, res) {
 
     if (!contentValid) {
       if (!service || !operation) {
-        logger.verbose(requestId + ' AccessDeniedException')
+        logger.verbose('request.error AccessDeniedException', requestMeta)
         return sendError(req, res, false, 'AccessDeniedException',
           'Unable to determine service/operation name to be authorized')
       } else if (!serviceValid) {
-        logger.verbose(requestId + ' UnrecognizedClientException')
+        logger.verbose('request.error UnrecognizedClientException', requestMeta)
         return sendError(req, res, false, 'UnrecognizedClientException',
           'No authorization strategy was found for service: ' + service + ', operation: ' + operation)
       } else if (!operationValid) {
-        logger.verbose(requestId + ' InternalFailure')
+        logger.verbose('request.error InternalFailure', requestMeta)
         return sendError(req, res, false, 'InternalFailure', 500)
       }
-      logger.verbose(requestId + ' UnknownOperationException')
+      logger.verbose('request.error UnknownOperationException', requestMeta)
       return sendError(req, res, false, 'UnknownOperationException', 404)
     }
 
@@ -295,31 +294,32 @@ function httpHandler(logger, store, req, res) {
     var serviceNamespace = serviceName ? validations.toLowerFirst(serviceName) : ''
     var action = serviceNamespace + operation
 
-    logger.verbose(requestId + ' calling action ' + action)
+    logger.verbose('request.action ' + action, requestMeta)
 
     var actionValidation = actionValidations[action]
     try {
       data = validations.checkTypes(data, actionValidation.types)
       validations.checkValidations(data, actionValidation.types, actionValidation.custom, operation)
     } catch (e) {
-      logger.verbose(requestId + ' failed validation')
+      logger.verbose('request.validation.failed', requestMeta)
       if (e.statusCode) return sendJson(req, res, e.body, e.statusCode)
       throw e
     }
 
-    actions[action](store, data, function(err, data) {
-      logger.verbose(requestId + ' action finished')
+    actions[action](requestMeta, logger, store, data, function(err, data) {
+      logger.verbose('request.action.complete', requestMeta)
+      if (err && err.statusCode) {
+        logger.verbose('request.action.error ' + err.statusCode, requestMeta)
+        if (err.body)
+          logger.debug('request.action.error.message ' + err.body.message, requestMeta)
+        return sendJson(req, res, err.body, err.statusCode)
+      }
       if (err) {
-        if (err.statusCode) {
-          logger.verbose(requestId + ' status code ' + err.statusCode)
-          if (err.body) logger.debug('    ' + err.body.message ? err.body.message : err.body)
-          return sendJson(req, res, err.body, err.statusCode)
-        }
-        logger.verbose(requestId + ' errored without status code')
+        logger.verbose('request.action.error', requestMeta)
         throw err
       }
 
-      logger.verbose(requestId + ' request complete ' + currentISOTimestamp())
+      logger.verbose('request.finished', requestMeta)
       sendJson(req, res, data)
     })
   })

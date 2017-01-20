@@ -1,5 +1,5 @@
 
-module.exports = function deleteStream(store, data, cb) {
+module.exports = function deleteStream(requestMeta, logger, store, data, cb) {
 
   var key = data.StreamName, metaDb = store.metaDb
 

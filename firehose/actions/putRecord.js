@@ -1,19 +1,29 @@
 var uuid = require('node-uuid'),
     db = require('../../db')
 
-module.exports = function putRecord(store, data, cb) {
+module.exports = function putRecord(requestMeta, logger, store, data, cb) {
 
-  var streamName = data.DeliveryStreamName,
+  var actionName = 'firehose.putRecord',
+      actionMeta = Object.assign({}, requestMeta),
+      streamName = data.DeliveryStreamName,
       metaDb = store.metaDb,
       streamDb = store.getStreamDb(streamName)
+
+  actionMeta.action = actionName
+
+  logger.verbose('action.start', actionMeta)
 
   metaDb.lock(streamName, function(release) {
     cb = release(cb)
 
     store.getStream(streamName, function(err, stream) {
-      if (err) return cb(err)
+      if (err) {
+        logger.verbose('action.error', actionMeta)
+        return cb(err)
+      }
 
       if (!~['ACTIVE', 'UPDATING'].indexOf(stream.DeliveryStreamStatus)) {
+        logger.verbose('action.error streamNotFound', actionMeta)
         return cb(db.clientError('ResourceNotFoundException',
           'DeliveryStream ' + streamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
       }
@@ -25,7 +35,12 @@ module.exports = function putRecord(store, data, cb) {
       }
 
       streamDb.put(recordId, record, function(err) {
-        if (err) return cb(err)
+        if (err) {
+          logger.verbose('action.error', actionMeta)
+          return cb(err)
+        }
+
+        logger.verbose('action.complete', actionMeta)
         cb(null, {RecordId: recordId})
       })
     })

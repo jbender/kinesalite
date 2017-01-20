@@ -1,7 +1,7 @@
 var BigNumber = require('bignumber.js'),
     db = require('../../db')
 
-module.exports = function splitShard(store, data, cb) {
+module.exports = function splitShard(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb, key = data.StreamName, shardInfo, shardId, shardIx
 

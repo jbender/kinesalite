@@ -1,7 +1,7 @@
 var BigNumber = require('bignumber.js'),
     db = require('../../db')
 
-module.exports = function putRecord(store, data, cb) {
+module.exports = function putRecord(requestMeta, logger, store, data, cb) {
 
   var key = data.StreamName, metaDb = store.metaDb, streamDb = store.getStreamDb(data.StreamName)
 

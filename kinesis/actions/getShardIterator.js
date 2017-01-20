@@ -1,6 +1,6 @@
 var db = require('../../db')
 
-module.exports = function getShardIterator(store, data, cb) {
+module.exports = function getShardIterator(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb, shardInfo, shardId, shardIx
 

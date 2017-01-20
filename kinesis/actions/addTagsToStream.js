@@ -1,6 +1,6 @@
 var db = require('../../db')
 
-module.exports = function addTagsToStream(store, data, cb) {
+module.exports = function addTagsToStream(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb
 

@@ -1,6 +1,6 @@
 var db = require('../../db')
 
-module.exports = function removeTagsFromStream(store, data, cb) {
+module.exports = function removeTagsFromStream(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb
 

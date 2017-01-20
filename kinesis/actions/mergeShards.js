@@ -1,7 +1,7 @@
 var BigNumber = require('bignumber.js'),
     db = require('../../db')
 
-module.exports = function mergeShards(store, data, cb) {
+module.exports = function mergeShards(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb, key = data.StreamName, shardNames = [data.ShardToMerge, data.AdjacentShardToMerge],
     shardInfo, shardIds = [], shardIxs = [], i

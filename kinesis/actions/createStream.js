@@ -4,7 +4,7 @@ var BigNumber = require('bignumber.js'),
 var POW_128 = new BigNumber(2).pow(128),
     SEQ_ADJUST_MS = 2000
 
-module.exports = function createStream(store, data, cb) {
+module.exports = function createStream(requestMeta, logger, store, data, cb) {
 
   var key = data.StreamName, metaDb = store.metaDb
 

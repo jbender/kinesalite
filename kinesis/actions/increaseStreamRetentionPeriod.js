@@ -1,6 +1,6 @@
 var db = require('../../db')
 
-module.exports = function increaseStreamRetentionPeriod(store, data, cb) {
+module.exports = function increaseStreamRetentionPeriod(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb
 

@@ -2,7 +2,7 @@ var crypto = require('crypto'),
     once = require('once'),
     db = require('../../db')
 
-module.exports = function getRecords(store, data, cb) {
+module.exports = function getRecords(requestMeta, logger, store, data, cb) {
 
   var metaDb = store.metaDb, shardIx, shardId, iteratorTime, streamName, seqNo, seqObj, pieces,
     buffer = new Buffer(data.ShardIterator, 'base64'), now = Date.now(),
