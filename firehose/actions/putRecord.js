@@ -6,17 +6,18 @@ module.exports = function putRecord(requestMeta, logger, store, data, cb) {
   var actionName = 'firehose.putRecord',
       actionMeta = Object.assign({}, requestMeta),
       streamName = data.DeliveryStreamName,
+      streamKey = store.streamKey({name: streamName, type: 'deliveryStream'}),
       metaDb = store.metaDb,
-      streamDb = store.getStreamDb(streamName)
+      streamDb = store.getStreamDb(streamKey)
 
   actionMeta.action = actionName
 
   logger.verbose('action.start', actionMeta)
 
-  metaDb.lock(streamName, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(streamName, function(err, stream) {
+    store.getStream(streamKey, function(err, stream) {
       if (err) {
         logger.verbose('action.error', actionMeta)
         return cb(err)

@@ -3,17 +3,20 @@ var BigNumber = require('bignumber.js'),
 
 module.exports = function putRecord(requestMeta, logger, store, data, cb) {
 
-  var key = data.StreamName, metaDb = store.metaDb, streamDb = store.getStreamDb(data.StreamName)
+  var streamName = data.StreamName,
+      metaDb = store.metaDb,
+      streamKey = store.streamKey({name: streamName, type: 'stream'}),
+      streamDb = store.getStreamDb(streamKey)
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(data.StreamName, function(err, stream) {
+    store.getStream(streamName, function(err, stream) {
       if (err) return cb(err)
 
       if (!~['ACTIVE', 'UPDATING'].indexOf(stream.StreamStatus)) {
         return cb(db.clientError('ResourceNotFoundException',
-          'Stream ' + data.StreamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
+          'Stream ' + streamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
       }
 
       var hashKey, shardIx, shardId, shardCreateTime
@@ -37,7 +40,7 @@ module.exports = function putRecord(requestMeta, logger, store, data, cb) {
         } catch (e) {
           return cb(e.message == 'Unknown version: 3' ? db.serverError() : db.clientError('InvalidArgumentException',
               'ExclusiveMinimumSequenceNumber ' + data.SequenceNumberForOrdering + ' used in PutRecord on stream ' +
-              data.StreamName + ' under account ' + metaDb.awsAccountId + ' is invalid.'))
+              streamName + ' under account ' + metaDb.awsAccountId + ' is invalid.'))
         }
       }
 
@@ -70,7 +73,7 @@ module.exports = function putRecord(requestMeta, logger, store, data, cb) {
 
       stream._seqIx[seqIxIx]++
 
-      metaDb.put(key, stream, function(err) {
+      metaDb.put(streamKey, stream, function(err) {
         if (err) return cb(err)
 
         var record = {

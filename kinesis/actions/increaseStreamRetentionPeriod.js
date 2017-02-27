@@ -2,12 +2,14 @@ var db = require('../../db')
 
 module.exports = function increaseStreamRetentionPeriod(requestMeta, logger, store, data, cb) {
 
-  var metaDb = store.metaDb
+  var metaDb = store.metaDb,
+      streamName = data.StreamName,
+      streamKey = store.streamKey({name: streamName, type: 'stream'})
 
-  metaDb.lock(data.StreamName, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(data.StreamName, function(err, stream) {
+    store.getStream(streamKey, function(err, stream) {
       if (err) return cb(err)
 
       if (data.RetentionPeriodHours < 24) {
@@ -25,14 +27,14 @@ module.exports = function increaseStreamRetentionPeriod(requestMeta, logger, sto
       if (stream.RetentionPeriodHours > data.RetentionPeriodHours) {
         return cb(db.clientError('InvalidArgumentException',
           'Requested retention period (' + data.RetentionPeriodHours +
-          ' hours) for stream ' + data.StreamName +
+          ' hours) for stream ' + streamName +
           ' can not be shorter than existing retention period (' + stream.RetentionPeriodHours +
           ' hours). Use DecreaseRetentionPeriod API.'))
       }
 
       stream.RetentionPeriodHours = data.RetentionPeriodHours
 
-      metaDb.put(data.StreamName, stream, function(err) {
+      metaDb.put(streamKey, stream, function(err) {
         if (err) return cb(err)
 
         cb()

@@ -1,7 +1,6 @@
 var crypto = require('crypto'),
     lazy = require('lazy'),
     levelup = require('levelup'),
-    memdown = require('memdown'),
     sublevel = require('level-sublevel'),
     Lock = require('lock'),
     BigNumber = require('bignumber.js')
@@ -21,6 +20,8 @@ exports.createShardIterator = createShardIterator
 exports.sumShards = sumShards
 exports.ITERATOR_PWD = 'kinesalite'
 
+var logger = require('../utils/logger').create()
+
 function create(options) {
   options = options || {}
   if (options.createStreamMs == null) options.createStreamMs = 500
@@ -28,7 +29,7 @@ function create(options) {
   if (options.updateStreamMs == null) options.updateStreamMs = 500
   if (options.shardLimit == null) options.shardLimit = 10
 
-  var db = levelup(options.path || '/does/not/matter', options.path ? {} : {db: memdown}),
+  var db = options.path ? levelup(options.path) : levelup('kinesalite', {db: require('memdown')}),
       sublevelDb = sublevel(db),
       metaDb = sublevelDb.sublevel('meta', {valueEncoding: 'json'}),
       streamDbs = []
@@ -39,26 +40,37 @@ function create(options) {
   metaDb.awsAccountId = (process.env.AWS_ACCOUNT_ID || '0000-0000-0000').replace(/[^\d]/g, '')
   metaDb.awsRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'
 
-  function getStreamDb(name) {
-    if (!streamDbs[name]) {
-      streamDbs[name] = sublevelDb.sublevel('stream-' + name, {valueEncoding: 'json'})
-      streamDbs[name].lock = new Lock()
-    }
-    return streamDbs[name]
+  function streamKey(options) {
+    return options.type + '-' + options.name
   }
 
-  function deleteStreamDb(name, cb) {
-    var streamDb = getStreamDb(name)
-    delete streamDbs[name]
+  function deconstructStreamKey(streamKey) {
+    var [type, name] = streamKey.split('-')
+    return {type, name}
+  }
+
+  function getStreamDb(dbKey) {
+    if (!streamDbs[dbKey]) {
+      streamDbs[dbKey] = sublevelDb.sublevel(dbKey, {valueEncoding: 'json'})
+      streamDbs[dbKey].lock = new Lock()
+    }
+    return streamDbs[dbKey]
+  }
+
+  function deleteStreamDb(dbKey, cb) {
+    var streamDb = getStreamDb(dbKey)
+    delete streamDbs[dbKey]
     lazyStream(streamDb.createKeyStream(), cb).join(function(keys) {
       streamDb.batch(keys.map(function(key) { return {type: 'del', key: key} }), cb)
     })
   }
 
-  function getStream(name, cb) {
-    metaDb.get(name, function(err, stream) {
+  function getStream(dbKey, cb) {
+    metaDb.get(dbKey, function(err, stream) {
+      console.log(metaDb)
       if (err) {
         if (err.name == 'NotFoundError') {
+          var {name} = deconstructStreamKey(dbKey)
           err.statusCode = 400
           err.body = {
             __type: 'ResourceNotFoundException',
@@ -90,6 +102,7 @@ function create(options) {
     deleteStreamDb: deleteStreamDb,
     getStream: getStream,
     recreate: recreate,
+    streamKey: streamKey,
   }
 }
 

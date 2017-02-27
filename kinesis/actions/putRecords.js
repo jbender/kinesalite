@@ -3,23 +3,29 @@ var BigNumber = require('bignumber.js'),
 
 module.exports = function putRecords(requestMeta, logger, store, data, cb) {
 
-  var key = data.StreamName, metaDb = store.metaDb, streamDb = store.getStreamDb(data.StreamName)
+  var streamName = data.StreamName,
+      metaDb = store.metaDb,
+      streamKey = store.streamKey({name: streamName, type: 'stream'}),
+      streamDb = store.getStreamDb(streamKey)
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(data.StreamName, function(err, stream) {
+    store.getStream(streamKey, function(err, stream) {
       if (err) return cb(err)
 
       if (!~['ACTIVE', 'UPDATING'].indexOf(stream.StreamStatus)) {
         return cb(db.clientError('ResourceNotFoundException',
-          'Stream ' + data.StreamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
+          'Stream ' + streamName + ' under account ' + metaDb.awsAccountId + ' not found.'))
       }
 
-      var batchOps = new Array(data.Records.length), returnRecords = new Array(data.Records.length),
-        seqPieces = new Array(data.Records.length), record, hashKey, seqPiece, i
+      var numRecords = data.Records.length,
+          batchOps = new Array(numRecords),
+          returnRecords = new Array(numRecords),
+          seqPieces = new Array(numRecords),
+          record, hashKey, seqPiece, i
 
-      for (i = 0; i < data.Records.length; i++) {
+      for (i = 0; i < numRecords; i++) {
         record = data.Records[i]
 
         if (record.ExplicitHashKey != null) {
@@ -83,13 +89,13 @@ module.exports = function putRecords(requestMeta, logger, store, data, cb) {
             seqTime: now,
           })
 
-          var streamKey = db.shardIxToHex(shardIx) + '/' + seqNum
+          var recordKey = db.shardIxToHex(shardIx) + '/' + seqNum
 
           stream._seqIx[seqIxIx]++
 
           batchOps[i] = {
             type: 'put',
-            key: streamKey,
+            key: recordKey,
             value: {
               PartitionKey: record.PartitionKey,
               Data: record.Data,
@@ -101,7 +107,7 @@ module.exports = function putRecords(requestMeta, logger, store, data, cb) {
         }
       })
 
-      metaDb.put(key, stream, function(err) {
+      metaDb.put(streamKey, stream, function(err) {
         if (err) return cb(err)
 
         streamDb.batch(batchOps, {}, function(err) {

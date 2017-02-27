@@ -6,16 +6,20 @@ var POW_128 = new BigNumber(2).pow(128),
 
 module.exports = function createStream(requestMeta, logger, store, data, cb) {
 
-  var key = data.StreamName, metaDb = store.metaDb
+  var streamName = data.StreamName,
+      streamKey = store.streamKey({name: streamName, type: 'stream'}),
+      metaDb = store.metaDb
 
-  metaDb.lock(key, function(release) {
+  logger.info('CreateStream.start name:' + streamName)
+
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    metaDb.get(key, function(err) {
+    metaDb.get(streamKey, function(err) {
       if (err && err.name != 'NotFoundError') return cb(err)
       if (!err)
         return cb(db.clientError('ResourceInUseException',
-          'Stream ' + key + ' under account ' + metaDb.awsAccountId + ' already exists.'))
+          'Stream ' + streamName + ' under account ' + metaDb.awsAccountId + ' already exists.'))
 
       db.sumShards(store, function(err, shardSum) {
         if (err) return cb(err)
@@ -56,7 +60,7 @@ module.exports = function createStream(requestMeta, logger, store, data, cb) {
           _tags: Object.create(null), // Hidden data, remove when returning
         }
 
-        metaDb.put(key, stream, function(err) {
+        metaDb.put(streamKey, stream, function(err) {
           if (err) return cb(err)
 
           setTimeout(function() {
@@ -65,10 +69,11 @@ module.exports = function createStream(requestMeta, logger, store, data, cb) {
             stream.StreamStatus = 'ACTIVE'
             stream.Shards = shards
 
-            metaDb.put(key, stream, function(err) {
+            metaDb.put(streamKey, stream, function(err) {
               if (err && !/Database is not open/.test(err)) console.error(err.stack || err)
-            })
 
+              logger.info('CreateStream.finish name:' + streamName)
+            })
           }, store.createStreamMs)
 
           cb()

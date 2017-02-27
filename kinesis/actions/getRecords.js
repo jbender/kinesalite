@@ -4,9 +4,17 @@ var crypto = require('crypto'),
 
 module.exports = function getRecords(requestMeta, logger, store, data, cb) {
 
-  var metaDb = store.metaDb, shardIx, shardId, iteratorTime, streamName, seqNo, seqObj, pieces,
-    buffer = new Buffer(data.ShardIterator, 'base64'), now = Date.now(),
-    decipher = crypto.createDecipher('aes-256-cbc', db.ITERATOR_PWD)
+  var metaDb = store.metaDb,
+      shardIx,
+      shardId,
+      iteratorTime,
+      streamName,
+      seqNo,
+      seqObj,
+      pieces,
+      buffer = new Buffer(data.ShardIterator, 'base64'),
+      now = Date.now(),
+      decipher = crypto.createDecipher('aes-256-cbc', db.ITERATOR_PWD)
 
   if (buffer.length < 152 || buffer.length > 280 || buffer.toString('base64') != data.ShardIterator)
     return cb(invalidShardIterator())
@@ -67,8 +75,12 @@ module.exports = function getRecords(requestMeta, logger, store, data, cb) {
 
     cb = once(cb)
 
-    var streamDb = store.getStreamDb(streamName), cutoffTime = now - (stream.RetentionPeriodHours * 60 * 60 * 1000),
-      keysToDelete = [], lastItem, opts
+    var streamKey = store.streamKey({name: streamName, type: 'stream'}),
+        streamDb = store.getStreamDb(streamKey),
+        cutoffTime = now - (stream.RetentionPeriodHours * 60 * 60 * 1000),
+        keysToDelete = [],
+        lastItem,
+        opts
 
     opts = {
       gte: db.shardIxToHex(shardIx) + '/' + seqNo,

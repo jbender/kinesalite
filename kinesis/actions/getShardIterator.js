@@ -2,22 +2,27 @@ var db = require('../../db')
 
 module.exports = function getShardIterator(requestMeta, logger, store, data, cb) {
 
-  var metaDb = store.metaDb, shardInfo, shardId, shardIx
+  var metaDb = store.metaDb,
+      shardInfo,
+      shardId,
+      shardIx,
+      streamName = data.StreamName,
+      streamKey = store.streamKey({name: streamName, type: 'stream'})
 
   try {
     shardInfo = db.resolveShardId(data.ShardId)
   } catch (e) {
     return cb(db.clientError('ResourceNotFoundException',
-      'Could not find shard ' + data.ShardId + ' in stream ' + data.StreamName +
+      'Could not find shard ' + data.ShardId + ' in stream ' + streamName +
       ' under account ' + metaDb.awsAccountId + '.'))
   }
   shardId = shardInfo.shardId
   shardIx = shardInfo.shardIx
 
-  store.getStream(data.StreamName, function(err, stream) {
+  store.getStream(streamKey, function(err, stream) {
     if (err) {
       if (err.name == 'NotFoundError' && err.body) {
-        err.body.message = 'Shard ' + shardId + ' in stream ' + data.StreamName +
+        err.body.message = 'Shard ' + shardId + ' in stream ' + streamName +
           ' under account ' + metaDb.awsAccountId + ' does not exist'
       }
       return cb(err)
@@ -25,7 +30,7 @@ module.exports = function getShardIterator(requestMeta, logger, store, data, cb)
 
     if (shardIx >= stream.Shards.length) {
       return cb(db.clientError('ResourceNotFoundException',
-        'Shard ' + shardId + ' in stream ' + data.StreamName +
+        'Shard ' + shardId + ' in stream ' + streamName +
         ' under account ' + metaDb.awsAccountId + ' does not exist'))
     }
 
@@ -44,7 +49,7 @@ module.exports = function getShardIterator(requestMeta, logger, store, data, cb)
       } catch (e) {
         return cb(db.clientError('InvalidArgumentException',
           'StartingSequenceNumber ' + data.StartingSequenceNumber + ' used in GetShardIterator on shard ' + shardId +
-          ' in stream ' + data.StreamName + ' under account ' + metaDb.awsAccountId + ' is invalid.'))
+          ' in stream ' + streamName + ' under account ' + metaDb.awsAccountId + ' is invalid.'))
       }
       if (seqObj.shardIx != shardIx) {
         return cb(db.clientError('InvalidArgumentException',
@@ -55,7 +60,7 @@ module.exports = function getShardIterator(requestMeta, logger, store, data, cb)
         seqStr = seqObj.version === 0 ? db.stringifySequence(seqObj) : data.StartingSequenceNumber
         return cb(db.clientError('InvalidArgumentException',
           'StartingSequenceNumber ' + seqStr + ' used in GetShardIterator on shard ' + shardId +
-          ' in stream ' + data.StreamName + ' under account ' + metaDb.awsAccountId + ' is invalid ' +
+          ' in stream ' + streamName + ' under account ' + metaDb.awsAccountId + ' is invalid ' +
           'because it did not come from this stream.'))
       }
       if (data.ShardIteratorType == 'AT_SEQUENCE_NUMBER') {
@@ -80,6 +85,6 @@ module.exports = function getShardIterator(requestMeta, logger, store, data, cb)
         'Request specified ' + data.ShardIteratorType + ' and no StartingSequenceNumber.'))
     }
 
-    cb(null, {ShardIterator: db.createShardIterator(data.StreamName, shardId, iteratorSeq)})
+    cb(null, {ShardIterator: db.createShardIterator(streamName, shardId, iteratorSeq)})
   })
 }

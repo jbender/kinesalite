@@ -3,25 +3,32 @@ var BigNumber = require('bignumber.js'),
 
 module.exports = function mergeShards(requestMeta, logger, store, data, cb) {
 
-  var metaDb = store.metaDb, key = data.StreamName, shardNames = [data.ShardToMerge, data.AdjacentShardToMerge],
-    shardInfo, shardIds = [], shardIxs = [], i
+  var metaDb = store.metaDb,
+      key = data.StreamName,
+      streamName = data.StreamName,
+      streamKey = store.streamKey({name: streamName, type: 'stream'}),
+      shardNames = [data.ShardToMerge, data.AdjacentShardToMerge],
+      shardInfo,
+      shardIds = [],
+      shardIxs = [],
+      i
 
   for (i = 0; i < shardNames.length; i++) {
     try {
       shardInfo = db.resolveShardId(shardNames[i])
     } catch (e) {
       return cb(db.clientError('ResourceNotFoundException',
-        'Could not find shard ' + shardNames[i] + ' in stream ' + key +
+        'Could not find shard ' + shardNames[i] + ' in stream ' + streamName +
         ' under account ' + metaDb.awsAccountId + '.'))
     }
     shardIds[i] = shardInfo.shardId
     shardIxs[i] = shardInfo.shardIx
   }
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(key, function(err, stream) {
+    store.getStream(streamKey, function(err, stream) {
       if (err) return cb(err)
 
       if (stream.StreamStatus != 'ACTIVE') {
@@ -42,29 +49,29 @@ module.exports = function mergeShards(requestMeta, logger, store, data, cb) {
 
       if (!new BigNumber(shards[0].HashKeyRange.EndingHashKey).plus(1).eq(shards[1].HashKeyRange.StartingHashKey)) {
         return cb(db.clientError('InvalidArgumentException',
-          'Shards ' + shardIds[0] + ' and ' + shardIds[1] + ' in stream ' + key +
+          'Shards ' + shardIds[0] + ' and ' + shardIds[1] + ' in stream ' + streamName +
           ' under account ' + metaDb.awsAccountId + ' are not an adjacent pair of shards eligible for merging'))
       }
 
       if (stream.StreamStatus != 'ACTIVE') {
         return cb(db.clientError('ResourceInUseException',
-          'Stream ' + key + ' under account ' + metaDb.awsAccountId +
+          'Stream ' + streamName + ' under account ' + metaDb.awsAccountId +
           ' not ACTIVE, instead in state ' + stream.StreamStatus))
       }
 
       stream.StreamStatus = 'UPDATING'
 
-      metaDb.put(key, stream, function(err) {
+      metaDb.put(streamKey, stream, function(err) {
         if (err) return cb(err)
 
         setTimeout(function() {
 
-          metaDb.lock(key, function(release) {
+          metaDb.lock(streamKey, function(release) {
             cb = release(function(err) {
               if (err && !/Database is not open/.test(err)) console.error(err.stack || err)
             })
 
-            store.getStream(key, function(err, stream) {
+            store.getStream(streamKey, function(err, stream) {
               if (err && err.name == 'NotFoundError') return cb()
               if (err) return cb(err)
 
@@ -104,7 +111,7 @@ module.exports = function mergeShards(requestMeta, logger, store, data, cb) {
                 ShardId: db.shardIdName(stream.Shards.length),
               })
 
-              metaDb.put(key, stream, cb)
+              metaDb.put(streamKey, stream, cb)
             })
           })
 

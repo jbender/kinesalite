@@ -15,7 +15,7 @@ exports.create = function(options) {
             (options.meta && options.meta.process ? ':' + options.meta.process : '') +
             ' ' +
             (options.message ? options.message : '') +
-            (options.meta.action ? ' action:' + options.meta.action : '') +
+            (options.meta && options.meta.action ? ' action:' + options.meta.action : '') +
             (options.meta && options.meta.requestId ? ' requestId:' + options.meta.requestId : '')
         },
       }),

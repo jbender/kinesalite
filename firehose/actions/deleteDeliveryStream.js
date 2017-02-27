@@ -3,13 +3,14 @@ module.exports = function deleteDeliveryStream(requestMeta, logger, store, data,
   var actionName = 'firehose.deleteDeliveryStream',
       actionMeta = Object.assign({}, requestMeta),
       streamName = data.DeliveryStreamName,
+      streamKey = store.streamKey({name: streamName, type: 'deliveryStream'}),
       metaDb = store.metaDb
 
   actionMeta.action = actionName
 
   logger.verbose('action.start', actionMeta)
 
-  store.getStream(streamName, function(err, stream) {
+  store.getStream(streamKey, function(err, stream) {
     if (err) {
       logger.verbose('action.error', actionMeta)
       return cb(err)
@@ -17,13 +18,13 @@ module.exports = function deleteDeliveryStream(requestMeta, logger, store, data,
 
     stream.DeliveryStreamStatus = 'DELETING'
 
-    metaDb.put(streamName, stream, function(err) {
+    metaDb.put(streamKey, stream, function(err) {
       if (err) {
         logger.verbose('action.error', actionMeta)
         return cb(err)
       }
 
-      store.deleteStreamDb(streamName, function(err) {
+      store.deleteDeliveryStreamDb(streamName, function(err) {
         if (err) {
           logger.verbose('action.error', actionMeta)
           return cb(err)

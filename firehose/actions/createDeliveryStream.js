@@ -5,16 +5,17 @@ module.exports = function createDeliveryStream(requestMeta, logger, store, data,
   var actionName = 'firehose.createDeliveryStream',
       actionMeta = Object.assign({}, requestMeta),
       streamName = data.DeliveryStreamName,
+      streamKey = store.streamKey({name: streamName, type: 'deliveryStream'}),
       metaDb = store.metaDb
 
   actionMeta.action = actionName
 
   logger.verbose('action.start', actionMeta)
 
-  metaDb.lock(streamName, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    metaDb.get(streamName, function(err) {
+    metaDb.get(streamKey, function(err) {
       if (err && err.name != 'NotFoundError') {
         logger.verbose('action.error', actionMeta)
         return cb(err)
@@ -25,20 +26,22 @@ module.exports = function createDeliveryStream(requestMeta, logger, store, data,
           'DeliveryStream ' + streamName + ' under account ' + metaDb.awsAccountId + ' already exists.'))
       }
 
-      arn = 'arn:aws:kinesis' +
-          ':' + metaDb.awsRegion +
-          ':' + metaDb.awsAccountId +
-          ':deliverystream/' + streamName
+      var arn = 'arn:aws:kinesis' +
+            ':' + metaDb.awsRegion +
+            ':' + metaDb.awsAccountId +
+            ':deliverystream/' + streamName
 
-      destination =
+      var destination =
         data.ElasticsearchDestinationConfiguration ||
         data.ExtendedS3DestinationConfiguration ||
         data.RedshiftDestinationConfiguration ||
         data.S3DestinationConfiguration
 
-      now = Date.now()
+      destination.DestinationId = uuid.v1()
 
-      stream = {
+      var now = Date.now()
+
+      var stream = {
           CreateTimestamp: now,
           DeliveryStreamARN: arn,
           DeliveryStreamName: streamName,
@@ -49,7 +52,7 @@ module.exports = function createDeliveryStream(requestMeta, logger, store, data,
           VersionId: 1,
       }
 
-      metaDb.put(streamName, stream, function(err) {
+      metaDb.put(streamKey, stream, function(err) {
         if (err) {
           logger.verbose('action.error', actionMeta)
           return cb(err)
@@ -60,7 +63,7 @@ module.exports = function createDeliveryStream(requestMeta, logger, store, data,
             // Shouldn't need to lock/fetch as nothing should have changed
             stream.DeliveryStreamStatus = 'ACTIVE'
 
-            metaDb.put(streamName, stream, function(err) {
+            metaDb.put(streamKey, stream, function(err) {
               if (err && !/Database is not open/.test(err))
                 logger.error(err.stack || err)
             })

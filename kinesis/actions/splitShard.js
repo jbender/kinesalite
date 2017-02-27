@@ -3,22 +3,27 @@ var BigNumber = require('bignumber.js'),
 
 module.exports = function splitShard(requestMeta, logger, store, data, cb) {
 
-  var metaDb = store.metaDb, key = data.StreamName, shardInfo, shardId, shardIx
+  var metaDb = store.metaDb,
+      streamName = data.StreamName,
+      streamKey = store.streamKey({name: streamName, type: 'deliveryStream'}),
+      shardInfo,
+      shardId,
+      shardIx
 
   try {
     shardInfo = db.resolveShardId(data.ShardToSplit)
   } catch (e) {
     return cb(db.clientError('ResourceNotFoundException',
-      'Could not find shard ' + data.ShardToSplit + ' in stream ' + key +
+      'Could not find shard ' + data.ShardToSplit + ' in stream ' + streamName +
       ' under account ' + metaDb.awsAccountId + '.'))
   }
   shardId = shardInfo.shardId
   shardIx = shardInfo.shardIx
 
-  metaDb.lock(key, function(release) {
+  metaDb.lock(streamKey, function(release) {
     cb = release(cb)
 
-    store.getStream(key, function(err, stream) {
+    store.getStream(streamKey, function(err, stream) {
       if (err) return cb(err)
 
       if (stream.StreamStatus != 'ACTIVE') {
@@ -29,7 +34,7 @@ module.exports = function splitShard(requestMeta, logger, store, data, cb) {
 
       if (shardIx >= stream.Shards.length) {
         return cb(db.clientError('ResourceNotFoundException',
-          'Could not find shard ' + shardId + ' in stream ' + key +
+          'Could not find shard ' + shardId + ' in stream ' + streamName +
             ' under account ' + metaDb.awsAccountId + '.'))
       }
 
@@ -52,7 +57,7 @@ module.exports = function splitShard(requestMeta, logger, store, data, cb) {
             hashKey.gte(shard.HashKeyRange.EndingHashKey)) {
           return cb(db.clientError('InvalidArgumentException',
             'NewStartingHashKey ' + data.NewStartingHashKey + ' used in SplitShard() on shard ' + shardId +
-            ' in stream ' + key + ' under account ' + metaDb.awsAccountId +
+            ' in stream ' + streamName + ' under account ' + metaDb.awsAccountId +
             ' is not both greater than one plus the shard\'s StartingHashKey ' +
             shard.HashKeyRange.StartingHashKey + ' and less than the shard\'s EndingHashKey ' +
             shard.HashKeyRange.EndingHashKey + '.'))
@@ -60,23 +65,23 @@ module.exports = function splitShard(requestMeta, logger, store, data, cb) {
 
         if (stream.StreamStatus != 'ACTIVE') {
           return cb(db.clientError('ResourceInUseException',
-            'Stream ' + key + ' under account ' + metaDb.awsAccountId +
+            'Stream ' + streamName + ' under account ' + metaDb.awsAccountId +
             ' not ACTIVE, instead in state ' + stream.StreamStatus))
         }
 
         stream.StreamStatus = 'UPDATING'
 
-        metaDb.put(key, stream, function(err) {
+        metaDb.put(streamKey, stream, function(err) {
           if (err) return cb(err)
 
           setTimeout(function() {
 
-            metaDb.lock(key, function(release) {
+            metaDb.lock(streamKey, function(release) {
               cb = release(function(err) {
                 if (err && !/Database is not open/.test(err)) console.error(err.stack || err)
               })
 
-              store.getStream(key, function(err, stream) {
+              store.getStream(streamKey, function(err, stream) {
                 if (err && err.name == 'NotFoundError') return cb()
                 if (err) return cb(err)
 
@@ -123,7 +128,7 @@ module.exports = function splitShard(requestMeta, logger, store, data, cb) {
                   ShardId: db.shardIdName(stream.Shards.length),
                 })
 
-                metaDb.put(key, stream, cb)
+                metaDb.put(streamKey, stream, cb)
               })
             })
 
